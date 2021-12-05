@@ -120,7 +120,11 @@ By default, the loader initializes a system with one core and 512 MiB RAM.
 HERMIT_CPUS=4 HERMIT_MEM=8G uhyve /path/to/the/unikernel/binary
 ```
 
-## Debugging of RustyHermit apps (unstable)
+## Debugging RustyHermit apps
+
+uhyve supports guest debugging of single-core virtual machines via the [GDB Remote Serial Protocol](https://sourceware.org/gdb/onlinedocs/gdb/Remote-Protocol.html#Remote-Protocol).
+
+
 
 Basic support of (single-core) applications is already integrated into uhyve.
 By specifying variable `HERMIT_GDB_PORT=port`, uhyve is working as gdbserver and is waiting on port `port` for a connection to a gdb.

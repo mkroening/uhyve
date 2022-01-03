@@ -3,14 +3,16 @@ use goblin::elf64::header::ET_DYN;
 use goblin::elf64::program_header::{PT_LOAD, PT_TLS};
 use goblin::elf64::reloc::*;
 use log::{debug, error, warn};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::Write;
 use std::net::Ipv4Addr;
+use std::ops::Add;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
 use std::ptr::write;
 use std::time::SystemTime;
-use std::{fs, io, mem, slice};
+use std::{env, fs, io, iter, slice};
 use thiserror::Error;
 
 #[cfg(target_arch = "x86_64")]
@@ -144,20 +146,15 @@ pub trait VirtualCPU {
 	fn args(&self) -> &[OsString];
 
 	fn cmdsize(&self, syssize: &mut SysCmdsize) {
-		syssize.argc = 0;
-		syssize.envc = 0;
+		let first_arg = self.kernel_path().as_os_str();
+		let other_args = self.args().iter().map(AsRef::as_ref);
+		let args = iter::once(first_arg).chain(other_args).map(OsStr::as_bytes);
 
-		let path = self.kernel_path();
-		syssize.argsz[0] = path.as_os_str().len() as i32 + 1;
-
-		let mut counter = 0;
-		for argument in self.args() {
-			syssize.argsz[(counter + 1) as usize] = argument.len() as i32 + 1;
-
-			counter += 1;
+		for (size, arg) in syssize.argsz.iter_mut().zip(args) {
+			let c_str_len = arg.len() + 1;
+			*size = c_str_len.try_into().unwrap();
 		}
-
-		syssize.argc = counter + 1;
+		syssize.argc = self.args().len().add(1).try_into().unwrap();
 
 		let mut counter = 0;
 		for (key, value) in std::env::vars_os() {
@@ -175,61 +172,49 @@ pub trait VirtualCPU {
 
 	/// Copies the arguments end environment of the application into the VM's memory.
 	fn cmdval(&self, syscmdval: &SysCmdval) {
-		let argv = self.host_address(syscmdval.argv as usize);
+		let first_arg = self.kernel_path().as_os_str();
+		let other_args = self.args().iter().map(AsRef::as_ref);
+		let args = iter::once(first_arg).chain(other_args).map(OsStr::as_bytes);
 
-		// copy kernel path as first argument
-		{
-			let path = self.kernel_path().as_os_str();
-
-			let argvptr = unsafe { self.host_address(*(argv as *mut *mut u8) as usize) };
-			let len = path.len();
-			let slice = unsafe { slice::from_raw_parts_mut(argvptr as *mut u8, len + 1) };
-
-			// Create string for environment variable
-			slice[0..len].copy_from_slice(path.as_bytes());
-			slice[len] = 0;
-		}
+		let argvptrs = {
+			let mut argv = self.host_address(syscmdval.argv as usize) as *mut *mut u8;
+			iter::from_fn(move || {
+				let argvptr = unsafe { *argv };
+				argv = unsafe { argv.add(1) };
+				Some(self.host_address(argvptr as usize) as *mut u8)
+			})
+		};
 
 		// Copy the application arguments into the vm memory
-		let mut counter = 0;
-		for argument in self.args() {
-			let argvptr = unsafe {
-				self.host_address(
-					*((argv + (counter + 1) as usize * mem::size_of::<usize>()) as *mut *mut u8)
-						as usize,
-				)
-			};
-			let len = argument.len();
-			let slice = unsafe { slice::from_raw_parts_mut(argvptr as *mut u8, len + 1) };
-
-			// Create string for environment variable
-			slice[0..len].copy_from_slice(argument.as_bytes());
-			slice[len] = 0;
-
-			counter += 1;
+		for (argvptr, arg) in argvptrs.zip(args) {
+			let c_str_len = arg.len() + 1;
+			let slice = unsafe { slice::from_raw_parts_mut(argvptr, c_str_len) };
+			slice[0..arg.len()].copy_from_slice(arg);
+			slice[c_str_len - 1] = 0;
 		}
 
-		// Copy the environment variables into the vm memory
-		let mut counter = 0;
-		let envp = self.host_address(syscmdval.envp as usize);
-		for (key, value) in std::env::vars_os() {
-			if counter < MAX_ENVC.try_into().unwrap() {
-				let envptr = unsafe {
-					self.host_address(
-						*((envp + counter as usize * mem::size_of::<usize>()) as *mut *mut u8)
-							as usize,
-					)
-				};
-				let len = key.len() + value.len();
-				let slice = unsafe { slice::from_raw_parts_mut(envptr as *mut u8, len + 2) };
+		let envptrs = {
+			let mut envp = self.host_address(syscmdval.envp as usize) as *mut *mut u8;
+			iter::from_fn(move || {
+				let envptr = unsafe { *envp };
+				envp = unsafe { envp.add(1) };
+				Some(self.host_address(envptr as usize) as *mut u8)
+			})
+		};
 
-				// Create string for environment variable
-				slice[0..key.len()].copy_from_slice(key.as_bytes());
-				slice[key.len()..(key.len() + 1)].copy_from_slice("=".as_bytes());
-				slice[(key.len() + 1)..(len + 1)].copy_from_slice(value.as_bytes());
-				slice[len + 1] = 0;
-				counter += 1;
-			}
+		// Copy the environment variables into the vm memory
+		let vars = env::vars_os().map(|(key, value)| (key.into_vec(), value.into_vec()));
+		for (envptr, (key, value)) in envptrs.zip(vars) {
+			let slice = unsafe {
+				slice::from_raw_parts_mut(envptr as *mut u8, key.len() + 1 + value.len() + 1)
+			};
+
+			let len = slice.len();
+			// Create string for environment variable
+			slice[0..key.len()].copy_from_slice(&key);
+			slice[key.len()..key.len() + 1].copy_from_slice(b"=");
+			slice[key.len() + 1..len - 1].copy_from_slice(&value);
+			slice[len - 1] = 0;
 		}
 	}
 

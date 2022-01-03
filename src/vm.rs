@@ -73,7 +73,7 @@ const MAX_ARGC: usize = 128;
 const MAX_ENVC: usize = 128;
 
 #[repr(C, packed)]
-struct SysCmdsize {
+pub struct SysCmdsize {
 	argc: i32,
 	argsz: [i32; MAX_ARGC],
 	envc: i32,
@@ -81,7 +81,7 @@ struct SysCmdsize {
 }
 
 #[repr(C, packed)]
-struct SysCmdval {
+pub struct SysCmdval {
 	argv: *const u8,
 	envp: *const u8,
 }
@@ -140,8 +140,7 @@ pub trait VirtualCPU {
 	/// Returns the (host) path of the kernel binary.
 	fn kernel_path(&self) -> &Path;
 
-	fn cmdsize(&self, args_ptr: usize) {
-		let syssize = unsafe { &mut *(args_ptr as *mut SysCmdsize) };
+	fn cmdsize(&self, syssize: &mut SysCmdsize) {
 		syssize.argc = 0;
 		syssize.envc = 0;
 
@@ -185,9 +184,7 @@ pub trait VirtualCPU {
 	}
 
 	/// Copies the arguments end environment of the application into the VM's memory.
-	fn cmdval(&self, args_ptr: usize) {
-		let syscmdval = unsafe { &*(args_ptr as *const SysCmdval) };
-
+	fn cmdval(&self, syscmdval: &SysCmdval) {
 		let mut counter: i32 = 0;
 		let argv = self.host_address(syscmdval.argv as usize);
 		let mut found_separator = false;

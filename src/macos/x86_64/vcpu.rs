@@ -11,6 +11,7 @@ use burst::x86::{disassemble_64, InstructionOperation, OperandType};
 use lazy_static::lazy_static;
 use log::{debug, trace};
 use std::arch::x86_64::__cpuid_count;
+use std::ffi::OsString;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -146,6 +147,7 @@ lazy_static! {
 pub struct UhyveCPU {
 	id: u32,
 	kernel_path: PathBuf,
+	args: Vec<OsString>,
 	vcpu: xhypervisor::VirtualCpu,
 	vm_start: usize,
 	apic_base: u64,
@@ -156,12 +158,14 @@ impl UhyveCPU {
 	pub fn new(
 		id: u32,
 		kernel_path: PathBuf,
+		args: Vec<OsString>,
 		vm_start: usize,
 		ioapic: Arc<Mutex<IoApic>>,
 	) -> UhyveCPU {
 		UhyveCPU {
 			id,
 			kernel_path,
+			args,
 			vcpu: xhypervisor::VirtualCpu::new().unwrap(),
 			vm_start,
 			apic_base: APIC_DEFAULT_BASE,
@@ -624,6 +628,10 @@ impl VirtualCPU for UhyveCPU {
 
 	fn kernel_path(&self) -> &Path {
 		self.kernel_path.as_path()
+	}
+
+	fn args(&self) -> &[OsString] {
+		self.args.as_slice()
 	}
 
 	fn host_address(&self, addr: usize) -> usize {

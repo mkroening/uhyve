@@ -73,7 +73,7 @@ struct Args {
 
 	/// Arguments to forward to the kernel
 	#[structopt(parse(from_os_str))]
-	_arguments: Vec<OsString>,
+	args: Vec<OsString>,
 }
 
 #[derive(Parser, Debug)]
@@ -285,7 +285,7 @@ impl From<Args> for Params {
 				_mac,
 			},
 			kernel: _,
-			_arguments,
+			args,
 		} = args;
 		Self {
 			verbose,
@@ -305,6 +305,7 @@ impl From<Args> for Params {
 			nic,
 			#[cfg(target_os = "linux")]
 			gdb_port,
+			args,
 		}
 	}
 }

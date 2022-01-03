@@ -8,6 +8,7 @@ use crate::vm::VcpuStopReason;
 use crate::vm::VirtualCPU;
 use kvm_bindings::*;
 use kvm_ioctls::{VcpuExit, VcpuFd};
+use std::ffi::OsString;
 use std::path::Path;
 use std::path::PathBuf;
 use std::slice;
@@ -27,6 +28,7 @@ pub struct UhyveCPU {
 	vcpu: VcpuFd,
 	vm_start: usize,
 	kernel_path: PathBuf,
+	args: Vec<OsString>,
 	tx: Option<std::sync::mpsc::SyncSender<usize>>,
 	virtio_device: Arc<Mutex<VirtioNetPciDevice>>,
 	pci_addr: Option<u32>,
@@ -42,6 +44,7 @@ impl UhyveCPU {
 	pub fn new(
 		id: u32,
 		kernel_path: PathBuf,
+		args: Vec<OsString>,
 		vcpu: VcpuFd,
 		vm_start: usize,
 		tx: Option<std::sync::mpsc::SyncSender<usize>>,
@@ -52,6 +55,7 @@ impl UhyveCPU {
 			vcpu,
 			vm_start,
 			kernel_path,
+			args,
 			tx,
 			virtio_device,
 			pci_addr: None,
@@ -254,6 +258,10 @@ impl VirtualCPU for UhyveCPU {
 
 	fn kernel_path(&self) -> &Path {
 		self.kernel_path.as_path()
+	}
+
+	fn args(&self) -> &[OsString] {
+		self.args.as_slice()
 	}
 
 	fn host_address(&self, addr: usize) -> usize {

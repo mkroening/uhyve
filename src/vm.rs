@@ -121,7 +121,7 @@ pub enum VcpuStopReason {
 
 pub trait VirtualCPU {
 	/// Initialize the cpu to start running the code ad entry_point.
-	fn init(&mut self, entry_point: u64) -> HypervisorResult<()>;
+	fn init(&mut self, entry_point: u64, cpu_id: u32) -> HypervisorResult<()>;
 
 	/// Continues execution.
 	fn r#continue(&mut self) -> HypervisorResult<VcpuStopReason>;

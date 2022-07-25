@@ -12,7 +12,7 @@ use std::{
 	net::{TcpListener, TcpStream},
 	os::unix::prelude::JoinHandleExt,
 	sync::{Arc, Barrier},
-	thread,
+	thread, time::Duration,
 };
 
 use core_affinity::CoreId;
@@ -110,13 +110,9 @@ impl Uhyve {
 					}
 
 					let mut cpu = vm.create_cpu(cpu_id).unwrap();
-					cpu.init(vm.get_entry_point()).unwrap();
+					cpu.init(vm.get_entry_point(), cpu_id).unwrap();
 
-					// only one core is able to enter startup code
-					// => the wait for the predecessor core
-					while cpu_id != vm.cpu_online() {
-						hint::spin_loop();
-					}
+					thread::sleep(Duration::from_millis((4 - u64::from(cpu_id)) * 100));
 
 					// jump into the VM and execute code of the guest
 					match cpu.run() {
@@ -170,7 +166,7 @@ impl Uhyve {
 		}
 
 		let mut cpu = self.create_cpu(cpu_id).unwrap();
-		cpu.init(self.get_entry_point()).unwrap();
+		cpu.init(self.get_entry_point(), cpu_id).unwrap();
 
 		let connection = wait_for_gdb_connection(self.gdb_port.unwrap()).unwrap();
 		let debugger = GdbStub::new(connection);

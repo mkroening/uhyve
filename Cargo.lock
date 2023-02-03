@@ -556,9 +556,9 @@ dependencies = [
 
 [[package]]
 name = "raw-cpuid"
-version = "10.0.0"
+version = "10.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eced3cf60359e752e6ad8965b85c22c1c5160ccb4f5033b40f883fff95ddfe02"
+checksum = "c307f7aacdbab3f0adee67d52739a1d71112cc068d6fab169ddeb18e48877fad"
 dependencies = [
  "bitflags",
 ]
@@ -842,7 +842,7 @@ dependencies = [
  "mac_address",
  "nix 0.20.0",
  "nom",
- "raw-cpuid 10.0.0",
+ "raw-cpuid 10.6.1",
  "rftrace",
  "rftrace-frontend",
  "rustc-serialize",

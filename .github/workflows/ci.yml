@@ -145,5 +145,6 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
+          disable_safe_directory: true
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
